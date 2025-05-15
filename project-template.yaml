@@ -1,0 +1,97 @@
+Resources:
+
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTP and SSH
+      VpcId: vpc-0acc0dbc02a3d1c4a
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow MySQL from EC2
+      VpcId: vpc-0acc0dbc02a3d1c4a
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref EC2SecurityGroup
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: vpc-0acc0dbc02a3d1c4a
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: !Select
+        - 2
+        - !GetAZs ''
+  MyDBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: RDS subnet group
+      SubnetIds:
+        - subnet-0fb7b9af6e626b564
+        - !Ref PrivateSubnet2
+      DBSubnetGroupName: my-db-subnet-group
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: LambdaBasicRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: MyBasicFunction
+      Runtime: python3.9
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          def handler(event, context):
+              return {
+                  "statusCode": 200,
+                  "body": "Hello from Lambda"
+              }
+
+  InstanceProjecct:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      SubnetId: subnet-04032424067368ac0
+      SecurityGroupIds:
+        - !Ref EC2SecurityGroup
+      KeyName: NewwithVPC
+      ImageId: ami-0f88e80871fd81e91
+
+  RDSInstanceProject:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: mywebappdb
+      Engine: mysql
+      EngineVersion: '8.0'
+      MasterUsername: admin
+      MasterUserPassword: MySecurePassword123!
+      DBInstanceClass: db.t3.micro
+      AllocatedStorage: 20
+      DBSubnetGroupName: !Ref MyDBSubnetGroup
+      VPCSecurityGroups:
+        - !Ref RDSSecurityGroup
+    PubliclyAccessible: false
